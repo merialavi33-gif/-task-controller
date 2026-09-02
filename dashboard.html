@@ -1,0 +1,1375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Multi-Device Task & Account Controller</title>
+    <link rel="manifest" href="manifest.json">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+    <!-- Firebase SDKs (Compat - For Realtime Database) -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+
+    <style>
+        * { -webkit-tap-highlight-color: transparent; }
+        body { 
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: linear-gradient(180deg, #1e3a8a 0%, #3b82f6 35%, #f8fafc 100%) !important;
+            background-attachment: fixed !important;
+            min-height: 100vh;
+        }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.6); }
+        ::-webkit-scrollbar-thumb { background: rgba(51, 65, 85, 0.8); border-radius: 3px; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .device-card {
+            animation: fadeIn 0.3s ease-out forwards;
+            opacity: 0;
+            background: rgba(15, 23, 42, 0.75) !important;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+        }
+        .device-card:nth-child(1) { animation-delay: 0.03s; }
+        .device-card:nth-child(2) { animation-delay: 0.06s; }
+        .device-card:nth-child(3) { animation-delay: 0.09s; }
+        .device-card:nth-child(4) { animation-delay: 0.12s; }
+        .device-card:nth-child(5) { animation-delay: 0.15s; }
+        .device-card:nth-child(6) { animation-delay: 0.18s; }
+
+        .account-item-card {
+            animation: fadeIn 0.3s ease-out forwards;
+            background: rgba(15, 23, 42, 0.65) !important;
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .unified-glass-panel {
+            background: rgba(15, 23, 42, 0.85) !important;
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.6);
+        }
+
+        .phone-title { font-size: 1.12rem; font-weight: 800; letter-spacing: 0.02em; }
+        .task-label { font-weight: 600; font-size: 0.9rem; line-height: 1.4; }
+        .sub-task-label { font-weight: 500; font-size: 0.82rem; }
+        .app-header { font-weight: 700; font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; }
+
+        .checkbox-custom { width: 1.25rem; height: 1.25rem; accent-color: #10b981; cursor: pointer; flex-shrink: 0; }
+        .checkbox-custom.sub { width: 1.1rem; height: 1.1rem; }
+        .checkbox-custom:checked + label { text-decoration: line-through; color: #10b981; font-weight: 700; transition: all 0.3s ease; }
+
+        .device-progress-bg { background: linear-gradient(90deg, rgba(30, 41, 59, 0.8) 0%, rgba(51, 65, 85, 0.8) 100%); }
+        .device-progress-fill { background: linear-gradient(90deg, #f59e0b 0%, #10b981 100%); transition: width 0.5s ease; }
+
+        .glass-header { background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+        .stat-card { 
+            background: rgba(15, 23, 42, 0.75) !important; 
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.12); 
+        }
+
+        @keyframes pulse-green {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+            50% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+        }
+        .completed-badge { animation: pulse-green 2s infinite; }
+
+        @keyframes pulse-urgent {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.03); opacity: 0.85; }
+        }
+        .urgent-pulse { animation: pulse-urgent 1.2s infinite; }
+
+        @keyframes blink-animation {
+            0% { opacity: 1; }
+            50% { opacity: 0.4; }
+            100% { opacity: 1; }
+        }
+        .blink-icon { animation: blink-animation 1.5s infinite; }
+
+        .toggle-btn i { transition: transform 0.2s ease; }
+        .toggle-btn.open i { transform: rotate(180deg); }
+
+        .btn-view-tracker {
+            padding: 6px 10px;
+            background: rgba(245, 158, 11, 0.15);
+            border: 1px solid rgba(245, 158, 11, 0.4);
+            border-radius: 8px;
+            font-size: 1rem;
+            color: #f59e0b;
+            transition: all 0.2s ease;
+        }
+        .btn-view-tracker:active { transform: scale(0.9); }
+
+        .task-row { transition: all 0.2s ease; }
+        .task-row:hover { background: rgba(30, 41, 59, 0.6); border-color: rgba(71, 85, 105, 0.6); }
+
+        canvas { position: fixed !important; top: 0; left: 0; pointer-events: none; z-index: 9999; }
+        .countdown-box { box-shadow: 0 0 15px rgba(245, 158, 11, 0.15); }
+
+        .btn-day-adjust {
+            font-weight: 700;
+            font-size: 0.72rem;
+            padding: 4px 8px;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        .btn-day-edit {
+            background: linear-gradient(135deg, #d97706 0%, #f59e0b 100%);
+            color: #ffffff;
+            border: 1px solid #fbbf24;
+        }
+        .btn-day-edit:active { transform: scale(0.92); }
+        .btn-day-save {
+            background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+            color: #ffffff;
+            border: 1px solid #34d399;
+        }
+        .btn-day-save:active { transform: scale(0.92); }
+        .btn-day-reset {
+            background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%);
+            color: #ffffff;
+            border: 1px solid #f87171;
+        }
+        .btn-day-reset:active { transform: scale(0.92); }
+        
+        .point-input {
+            background: #0f172a;
+            border: 1px solid #334155;
+            color: #f59e0b;
+            font-weight: bold;
+            padding: 2px 6px;
+            border-radius: 4px;
+            width: 105px;
+            text-align: center;
+        }
+
+        .custom-modal-bg { background: transparent; pointer-events: none; }
+        .custom-modal-box {
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.95) 0%, rgba(16, 185, 129, 0.95) 100%);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 30px rgba(16, 185, 129, 0.3);
+            pointer-events: auto;
+        }
+
+        .filter-container-bg {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(245, 158, 11, 0.12) 100%);
+            border: 1px solid rgba(16, 185, 129, 0.25);
+        }
+
+        .filter-tab {
+            background: rgba(15, 23, 42, 0.6);
+            color: #94a3b8;
+            border: 1px solid #334155;
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 5px 12px;
+            border-radius: 9999px;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+        }
+        .filter-tab.active {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: #ffffff;
+            border-color: #34d399;
+            box-shadow: 0 3px 10px rgba(16, 185, 129, 0.35);
+        }
+
+        .phone-filter-btn {
+            background: rgba(15, 23, 42, 0.75);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: #cbd5e1;
+            font-size: 0.7rem;
+            font-weight: 700;
+            padding: 6px 10px;
+            border-radius: 10px;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            backdrop-filter: blur(8px);
+        }
+        .phone-filter-btn.active {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            color: #0f172a;
+            border-color: #fbbf24;
+            box-shadow: 0 3px 10px rgba(245, 158, 11, 0.35);
+        }
+    </style>
+</head>
+<body class="text-slate-100 min-h-screen pb-20">
+
+    <!-- Custom Popup Modal Container -->
+    <div id="custom-modal" class="fixed inset-0 z-[100] custom-modal-bg flex items-center justify-center p-4 hidden">
+        <div class="custom-modal-box w-full max-w-sm rounded-3xl overflow-hidden animate-[fadeIn_0.2s_ease-out] text-slate-950 p-6 text-center">
+            <div class="w-14 h-14 rounded-2xl bg-slate-950/15 border border-white/20 flex items-center justify-center mx-auto mb-3 shadow-inner">
+                <i id="custom-modal-icon" class="fa-solid fa-triangle-exclamation text-slate-950 text-2xl"></i>
+            </div>
+            <h3 id="custom-modal-title" class="text-lg font-extrabold text-slate-950 mb-2 tracking-wide">Confirmation</h3>
+            <p id="custom-modal-message" class="text-xs font-semibold text-slate-900 mb-6 leading-relaxed px-2">Do you want to proceed with this action?</p>
+            <div id="custom-modal-actions" class="flex gap-3 justify-center">
+                <button id="custom-modal-cancel" class="flex-1 bg-slate-900/30 hover:bg-slate-900/50 text-slate-950 font-bold text-xs py-3 px-4 rounded-xl border border-white/20 transition active:scale-95 shadow-sm">Cancel</button>
+                <button id="custom-modal-confirm" class="flex-1 bg-slate-950 hover:bg-slate-900 text-amber-400 font-extrabold text-xs py-3 px-4 rounded-xl transition shadow-xl active:scale-95">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Header -->
+    <header class="glass-header border-b border-slate-800 sticky top-0 z-50">
+        <div class="max-w-6xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center shadow-lg shadow-amber-500/20">
+                    <i class="fa-solid fa-mobile-screen text-slate-950 text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="text-base md:text-lg font-bold text-amber-400 leading-tight">Device & Task Controller</h1>
+                    <p id="ethiopian-date-display" class="text-[11px] text-emerald-400 font-semibold mt-0.5">
+                        <i class="fa-regular fa-calendar-days mr-1"></i> Loading date...
+                    </p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <div class="countdown-box bg-slate-800/80 border border-slate-700 px-3 py-1.5 rounded-lg flex items-center gap-2">
+                    <i class="fa-regular fa-clock text-amber-400 text-xs"></i>
+                    <span id="countdown-timer" class="text-sm font-mono font-bold text-amber-400 tracking-wider">00:00:00</span>
+                </div>
+                <button id="notify-btn" class="bg-amber-500 hover:bg-amber-600 active:scale-95 text-slate-950 text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all shadow-lg shadow-amber-500/20" title="Sound Test">
+                    <i class="fa-solid fa-bell"></i>
+                </button>
+                
+                <div class="relative">
+                    <button id="menu-toggle-btn" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition active:scale-95">
+                        <i class="fa-solid fa-bars text-amber-400"></i> Menu
+                    </button>
+                    <!-- Updated Dropdown Menu with Profile, Accounts Tracker, Accounts Editor, Log Out -->
+                    <div id="dropdown-menu" class="hidden absolute right-0 mt-2 w-56 unified-glass-panel rounded-2xl shadow-2xl py-1 z-50 overflow-hidden">
+                        <div class="py-1">
+                            <a href="Profile.html" class="w-full text-left px-4 py-3 text-xs font-semibold text-slate-200 hover:bg-slate-800/80 flex items-center justify-between transition">
+                                <span class="flex items-center gap-2"><i class="fa-solid fa-user text-amber-400"></i> Profile</span>
+                                <i class="fa-solid fa-chevron-right text-[10px] text-slate-500"></i>
+                            </a>
+                            <a href="Accounts Tracker.html" class="w-full text-left px-4 py-3 text-xs font-semibold text-slate-200 hover:bg-slate-800/80 flex items-center justify-between transition">
+                                <span class="flex items-center gap-2"><i class="fa-solid fa-chart-line text-emerald-400"></i> Accounts Tracker</span>
+                                <i class="fa-solid fa-chevron-right text-[10px] text-slate-500"></i>
+                            </a>
+                            <a href="Accounts Editor.html" class="w-full text-left px-4 py-3 text-xs font-semibold text-slate-200 hover:bg-slate-800/80 flex items-center justify-between transition">
+                                <span class="flex items-center gap-2"><i class="fa-solid fa-pen-to-square text-blue-400"></i> Accounts Editor</span>
+                                <i class="fa-solid fa-chevron-right text-[10px] text-slate-500"></i>
+                            </a>
+                            <div class="border-t border-slate-700/50 my-1"></div>
+                            <a href="Log Out.html" class="w-full text-left px-4 py-3 text-xs font-semibold text-rose-400 hover:bg-rose-500/10 flex items-center justify-between transition">
+                                <span class="flex items-center gap-2"><i class="fa-solid fa-right-from-bracket text-rose-400"></i> Log Out</span>
+                                <i class="fa-solid fa-chevron-right text-[10px] text-slate-500"></i>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Accounts Modal / Drawer (Optional Quick View) -->
+    <div id="accounts-modal" class="fixed inset-0 z-[90] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+        <div class="unified-glass-panel w-full max-w-lg rounded-3xl p-5 shadow-2xl animate-[fadeIn_0.2s_ease-out] max-h-[90vh] flex flex-col">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-800 mb-3 flex-shrink-0">
+                <div class="flex items-center gap-2.5 min-w-0 pr-2">
+                    <div class="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 flex-shrink-0">
+                        <i class="fa-solid fa-chart-line text-sm"></i>
+                    </div>
+                    <div class="min-w-0">
+                        <h3 class="text-sm font-bold text-slate-100 truncate">Accounts Tracker</h3>
+                        <p class="text-[10px] text-slate-400 truncate">ቀናት እና ነጥቦች መከታተያ</p>
+                    </div>
+                </div>
+                <button id="close-accounts-modal" class="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition flex-shrink-0">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="filter-container-bg p-2 rounded-2xl mb-3 flex-shrink-0">
+                <div class="flex items-center gap-2 overflow-x-auto no-scrollbar">
+                    <button class="filter-tab active" data-filter="all">All</button>
+                    <button class="filter-tab" data-filter="poppo">Poppo</button>
+                    <button class="filter-tab" data-filter="desdes">desdes</button>
+                    <button class="filter-tab" data-filter="tello">tello</button>
+                    <button class="filter-tab" data-filter="kaya">Kaya</button>
+                    <button class="filter-tab" data-filter="yago">Yago</button>
+                </div>
+            </div>
+
+            <div id="accounts-list-container" class="space-y-3 overflow-y-auto pr-1 flex-1">
+            </div>
+            
+            <div class="pt-3 border-t border-slate-800 mt-3 text-center flex-shrink-0">
+                <p class="text-[10px] text-slate-500">🚀 Keep going! Accounts are sorted by remaining days.</p>
+            </div>
+        </div>
+    </div>
+
+    <main class="max-w-6xl mx-auto px-4 mt-5">
+
+        <!-- Congrats Banner -->
+        <div id="congrats-banner" class="hidden bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border border-emerald-500/50 text-emerald-300 p-4 rounded-2xl mb-5 text-center shadow-lg shadow-emerald-500/10">
+            <h2 class="text-base font-bold flex items-center justify-center gap-2">
+                <span class="text-xl">🎉</span> Congratulations! All tasks for today are fully completed!
+            </h2>
+        </div>
+
+        <!-- Top Stats Row -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+            <div class="stat-card rounded-xl p-3 flex items-center gap-3">
+                <div class="w-10 h-10 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center flex-shrink-0">
+                    <i class="fa-solid fa-list-check text-amber-400"></i>
+                </div>
+                <div>
+                    <p class="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Total Tasks</p>
+                    <p id="stat-total" class="text-xl font-extrabold text-slate-100">0</p>
+                </div>
+            </div>
+            <div class="stat-card rounded-xl p-3 flex items-center gap-3">
+                <div class="w-10 h-10 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center flex-shrink-0">
+                    <i class="fa-solid fa-check-circle text-emerald-400"></i>
+                </div>
+                <div>
+                    <p class="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Completed</p>
+                    <p id="stat-done" class="text-xl font-extrabold text-emerald-400">0</p>
+                </div>
+            </div>
+            <div class="stat-card rounded-xl p-3 flex items-center gap-3">
+                <div class="w-10 h-10 rounded-lg bg-rose-500/10 border border-rose-500/20 flex items-center justify-center flex-shrink-0">
+                    <i class="fa-solid fa-hourglass-half text-rose-400"></i>
+                </div>
+                <div>
+                    <p class="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Remaining</p>
+                    <p id="stat-remaining" class="text-xl font-extrabold text-rose-400">0</p>
+                </div>
+            </div>
+            <div class="stat-card rounded-xl p-3 flex items-center gap-3">
+                <div class="w-10 h-10 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center flex-shrink-0">
+                    <i class="fa-solid fa-mobile-screen-button text-blue-400"></i>
+                </div>
+                <div>
+                    <p class="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Phones Done</p>
+                    <p id="stat-phones-done" class="text-xl font-extrabold text-blue-400">0/6</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Overall Progress -->
+        <section class="device-card rounded-2xl p-5 mb-5 shadow-xl">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+                <div>
+                    <h2 class="text-base font-bold text-slate-100 flex items-center gap-2">
+                        <i class="fa-solid fa-chart-pie text-amber-400"></i> Today's Performance Progress
+                    </h2>
+                    <p class="text-[11px] text-slate-400 mt-0.5">Track all scheduled shift tasks across 6 mobile devices</p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <button id="reset-btn" class="text-[11px] bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 px-3 py-1.5 rounded-lg transition-all active:scale-95">
+                        <i class="fa-solid fa-rotate-left mr-1"></i>Reset Today's Ticks
+                    </button>
+                    <div class="text-right">
+                        <span id="progress-text" class="text-3xl font-extrabold text-emerald-400">0%</span>
+                        <span class="text-[10px] text-slate-400 block">Completed</span>
+                    </div>
+                </div>
+            </div>
+            <div class="w-full bg-slate-800/80 h-5 rounded-full overflow-hidden p-0.5 shadow-inner">
+                <div id="progress-bar" class="bg-gradient-to-r from-amber-500 via-yellow-400 to-emerald-500 h-full rounded-full transition-all duration-500 relative" style="width: 0%">
+                    <div class="absolute inset-0 bg-white/20 rounded-full" style="background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.3) 50%, transparent 100%);"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Quick Phone Filter Buttons Bar -->
+        <section class="mb-5 overflow-x-auto no-scrollbar">
+            <div class="flex items-center gap-2 pb-1" id="phone-filters-container">
+                <button class="phone-filter-btn active" data-phone="all">
+                    <i class="fa-solid fa-layer-group text-amber-400"></i> All Phones
+                </button>
+                <button class="phone-filter-btn" data-phone="pro">
+                    <span class="text-amber-400 font-extrabold">1.</span> pro
+                </button>
+                <button class="phone-filter-btn" data-phone="nova">
+                    <span class="text-amber-400 font-extrabold">2.</span> nova
+                </button>
+                <button class="phone-filter-btn" data-phone="eh">
+                    <span class="text-amber-400 font-extrabold">3.</span> EH
+                </button>
+                <button class="phone-filter-btn" data-phone="yab">
+                    <span class="text-amber-400 font-extrabold">4.</span> yab
+                </button>
+                <button class="phone-filter-btn" data-phone="zte">
+                    <span class="text-amber-400 font-extrabold">5.</span> ZTE
+                </button>
+                <button class="phone-filter-btn" data-phone="readspark">
+                    <span class="text-amber-400 font-extrabold">6.</span> 📕 spark
+                </button>
+            </div>
+        </section>
+
+        <!-- Devices Grid -->
+        <section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="devices-container">
+        </section>
+
+        <!-- Footer -->
+        <div class="mt-8 text-center pb-4">
+            <p class="text-[10px] text-slate-300">Multi-Device Task Controller v3.3</p>
+        </div>
+    </main>
+
+    <!-- Sound & Custom Modal Handler -->
+    <script>
+        window.requestNotificationPermission = function() {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+                gain.gain.setValueAtTime(0.15, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.4);
+                showCustomAlert('Sound Test', 'Audio alert tested successfully!');
+            } catch (err) {
+                console.log('Audio notification error: ', err);
+                showCustomAlert('Error', 'Could not play audio.');
+            }
+        };
+
+        function showCustomConfirm(title, message, onConfirm) {
+            const modal = document.getElementById('custom-modal');
+            const titleEl = document.getElementById('custom-modal-title');
+            const msgEl = document.getElementById('custom-modal-message');
+            const confirmBtn = document.getElementById('custom-modal-confirm');
+            const cancelBtn = document.getElementById('custom-modal-cancel');
+
+            titleEl.innerText = title;
+            msgEl.innerText = message;
+            cancelBtn.style.display = 'block';
+            modal.classList.remove('hidden');
+
+            const newConfirmBtn = confirmBtn.cloneNode(true);
+            const newCancelBtn = cancelBtn.cloneNode(true);
+            confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+            cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
+
+            newConfirmBtn.addEventListener('click', () => {
+                modal.classList.add('hidden');
+                if (onConfirm) onConfirm(true);
+            });
+
+            newCancelBtn.addEventListener('click', () => {
+                modal.classList.add('hidden');
+                if (onConfirm) onConfirm(false);
+            });
+        }
+
+        function showCustomAlert(title, message) {
+            const modal = document.getElementById('custom-modal');
+            const titleEl = document.getElementById('custom-modal-title');
+            const msgEl = document.getElementById('custom-modal-message');
+            const confirmBtn = document.getElementById('custom-modal-confirm');
+            const cancelBtn = document.getElementById('custom-modal-cancel');
+
+            titleEl.innerText = title;
+            msgEl.innerText = message;
+            cancelBtn.style.display = 'none'; 
+            confirmBtn.innerText = 'OK';
+            modal.classList.remove('hidden');
+
+            const newConfirmBtn = confirmBtn.cloneNode(true);
+            confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+
+            newConfirmBtn.addEventListener('click', () => {
+                modal.classList.add('hidden');
+                cancelBtn.style.display = 'block';
+            });
+        }
+    </script>
+
+    <!-- Firebase SDK & UI Logic -->
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyBH68jMv7c6WGB_z73e2IsTn3KTi2tg5c4",
+            authDomain: "argaw-timer.firebaseapp.com",
+            projectId: "argaw-timer",
+            storageBucket: "argaw-timer.firebasestorage.app",
+            messagingSenderId: "951329293569",
+            appId: "1:951329293569:web:00d5c0a6888972162a8700",
+            databaseURL: "https://argaw-timer-default-rtdb.firebaseio.com"
+        };
+
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        const db = firebase.database();
+        const tasksRef = db.ref('appState/tasks');
+        const daysRef = db.ref('appState/days');
+
+        const appRules = {
+            poppo: { daily: 2800, target: 100000, targetFormatted: "100k", maxDays: 36, name: "Poppo", badgeColor: "bg-rose-500/20 text-rose-400 border-rose-500/30" },
+            desdes: { daily: 10000, target: 1000000, targetFormatted: "1m", maxDays: 100, name: "desdes", badgeColor: "bg-blue-500/20 text-blue-400 border-blue-500/30" },
+            tello: { daily: 10000, target: 1000000, targetFormatted: "1m", maxDays: 100, name: "tello", badgeColor: "bg-teal-500/20 text-teal-400 border-teal-500/30" },
+            kaya:  { daily: 1000, target: 100000, targetFormatted: "100k", maxDays: 100, name: "Kaya", badgeColor: "bg-purple-500/20 text-purple-400 border-purple-500/30" },
+            yago:  { daily: 1200, target: 100000, targetFormatted: "100k", maxDays: 84, name: "Yago", badgeColor: "bg-amber-500/20 text-amber-400 border-amber-500/30" }
+        };
+
+        const devicesData = [
+            {
+                id: "pro", name: "Phone Pro", badge: "Pro", color: "from-blue-500 to-cyan-500",
+                poppo: [{ id: "pro_poppo_1", name: "Poppo (pro)", type: "poppo" }],
+                desdes: [],
+                tello: [{ id: "pro_tello_1", name: "tello live (kalkidan)", type: "tello" }],
+                kaya: [], yago: []
+            },
+            {
+                id: "nova", name: "Phone Nova", badge: "Nova", color: "from-purple-500 to-pink-500",
+                poppo: [{ id: "nova_poppo_1", name: "Poppo (nova)", type: "poppo" }],
+                desdes: [
+                    { id: "nova_tello_1", name: "desdes live (neli) - Party (2 hrs)", type: "desdes" }
+                ],
+                tello: [{ id: "nova_tello_2", name: "tello live (bruksol12)", type: "tello" }],
+                kaya: [{ id: "nova_kaya_1", name: "Kaya (abigia) - Party (2 hrs)", type: "kaya" }],
+                yago: []
+            },
+            {
+                id: "eh", name: "Phone EH", badge: "EH", color: "from-orange-500 to-red-500",
+                poppo: [{ id: "eh_poppo_1", name: "Poppo (lavish esha)", type: "poppo" }],
+                desdes: [],
+                tello: [{ id: "eh_tello_1", name: "tello live (eftah)", type: "tello" }],
+                kaya: [{ id: "eh_kaya_1", name: "Kaya (kayakal) - Party (2 hrs)", type: "kaya" }],
+                yago: []
+            },
+            {
+                id: "yab", name: "Phone Yab", badge: "Yab", color: "from-emerald-500 to-teal-500",
+                poppo: [{ id: "yab_poppo_1", name: "Poppo (yab)", type: "poppo" }],
+                desdes: [
+                    { id: "yab_tello_1", name: "desdes live (afi man) - Party (2 hrs)", type: "desdes" }
+                ],
+                tello: [{ id: "yab_tello_2", name: "tello live (emanda)", type: "tello" }],
+                kaya: [],
+                yago: [{ id: "yab_yago_1", name: "Yago (agb man) - Party (1 hr)", type: "yago" }]
+            },
+            {
+                id: "zte", name: "Phone ZTE", badge: "ZTE", color: "from-indigo-500 to-violet-500",
+                poppo: [{ id: "zte_poppo_1", name: "Poppo (hiri mon)", type: "poppo" }],
+                desdes: [],
+                tello: [{ id: "zte_tello_1", name: "tello live (tsi1229)", type: "tello" }],
+                kaya: [{ id: "zte_kaya_1", name: "Kaya (gigi.m) - Party (2 hrs)", type: "kaya" }],
+                yago: []
+            },
+            {
+                id: "readspark", name: "Phone 📕 spark", badge: "Read Spark", color: "from-rose-500 to-pink-500",
+                poppo: [{ id: "readspark_poppo_1", name: "Poppo (neli jack)", type: "poppo" }],
+                desdes: [],
+                tello: [{ id: "readspark_tello_1", name: "tello live (mariya lavi)", type: "tello" }],
+                kaya: [{ id: "readspark_kaya_1", name: "Kaya (mama) - Party (2 hrs)", type: "kaya" }],
+                yago: []
+            }
+        ];
+
+        let celebrated = false;
+        let daysCache = {};
+        let editingStates = {};
+        let currentFilter = 'all';
+        let currentPhoneFilter = 'all';
+
+        function formatPoints(points) {
+            if (isNaN(points)) return "0";
+            return Number(points).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+        }
+
+        function getAccountStats(accId, appType) {
+            let earnedPoints = daysCache[accId] !== undefined ? parseFloat(daysCache[accId]) : parseFloat(localStorage.getItem(accId + '_earned_points') || '0');
+            if (isNaN(earnedPoints)) earnedPoints = 0;
+            
+            const rule = appRules[appType];
+            let daysWorked = Math.floor(earnedPoints / rule.daily);
+
+            const remainingPoints = Math.max(0, rule.target - earnedPoints);
+            const remainingDays = Math.max(0, Math.ceil(remainingPoints / rule.daily));
+
+            return { 
+                accId,
+                appType,
+                daysWorked, 
+                earnedPoints, 
+                earnedFormatted: formatPoints(earnedPoints),
+                remainingDays, 
+                target: rule.target,
+                targetFormatted: rule.targetFormatted 
+            };
+        }
+
+        function refreshSingleTrackerUI(accId, appType) {
+            const statsContainer = document.getElementById(accId + '_stats');
+            if (statsContainer) {
+                const stats = getAccountStats(accId, appType);
+                const isEditing = editingStates[accId] || false;
+
+                let pointsDisplayHtml = '';
+                if (isEditing) {
+                    pointsDisplayHtml = '<input type="number" id="' + accId + '_input" value="' + stats.earnedPoints + '" class="point-input" step="any" min="0">';
+                } else {
+                    pointsDisplayHtml = '<strong class="text-amber-400 font-extrabold">' + stats.earnedFormatted + '</strong>';
+                }
+
+                let actionButtonHtml = '';
+                if (isEditing) {
+                    actionButtonHtml = '<button onclick="saveAccountPoints(\'' + accId + '\', \'' + appType + '\')" class="btn-day-adjust btn-day-save" title="Save Points"><i class="fa-solid fa-floppy-disk text-[10px]"></i> Save</button>';
+                } else {
+                    actionButtonHtml = '<button onclick="toggleEditPoints(\'' + accId + '\', \'' + appType + '\')" class="btn-day-adjust btn-day-edit" title="Edit Points"><i class="fa-solid fa-pen-to-square text-[10px]"></i> Edit</button>';
+                }
+
+                statsContainer.innerHTML = 
+                    '<div class="flex justify-between items-center text-slate-200 font-semibold">' +
+                        '<span><i class="fa-regular fa-calendar-check text-amber-400 mr-1"></i>Days: <strong class="text-amber-400 font-bold">' + stats.daysWorked + ' d</strong></span>' +
+                        '<span><i class="fa-solid fa-coins text-yellow-400 blink-icon mr-1"></i>Points: ' + pointsDisplayHtml + ' / <span class="text-slate-300 font-bold">' + stats.targetFormatted + '</span></span>' +
+                    '</div>' +
+                    '<div class="flex justify-between items-center text-slate-300 mt-1 flex-wrap gap-1">' +
+                        '<span class="text-emerald-400 font-bold"><i class="fa-solid fa-hourglass-start mr-1"></i>Days Left: ' + stats.remainingDays + '</span>' +
+                        '<div class="flex items-center gap-1 ml-auto">' +
+                            actionButtonHtml +
+                            '<button onclick="resetAccountDays(\'' + accId + '\', \'' + appType + '\')" class="btn-day-adjust btn-day-reset" title="Reset Account"><i class="fa-solid fa-rotate-left text-[9px]"></i> Reset</button>' +
+                        '</div>' +
+                    '</div>';
+            }
+            updatePoppoAccountsModalList();
+        }
+
+        window.toggleEditPoints = function(accId, appType) {
+            showCustomConfirm('Edit Points', 'Do you want to edit points for this account?', (confirmed) => {
+                if (confirmed) {
+                    editingStates[accId] = true;
+                    refreshSingleTrackerUI(accId, appType);
+                }
+            });
+        }
+
+        window.saveAccountPoints = function(accId, appType) {
+            const inputElem = document.getElementById(accId + '_input');
+            if (inputElem) {
+                let newPoints = parseFloat(inputElem.value);
+                if (isNaN(newPoints) || newPoints < 0) {
+                    showCustomAlert('Error', 'Please enter a valid points value!');
+                    return;
+                }
+                
+                const rule = appRules[appType];
+                let exactPoints = newPoints;
+                let calculatedDays = Math.floor(exactPoints / rule.daily);
+
+                showCustomConfirm('Save Points', 'Save entered points (' + exactPoints + ' pts) and days (' + calculatedDays + ' days)?', (confirmed) => {
+                    if (confirmed) {
+                        daysCache[accId] = exactPoints;
+                        localStorage.setItem(accId + '_earned_points', exactPoints);
+                        daysRef.child(accId).set(exactPoints);
+                        editingStates[accId] = false;
+                        refreshSingleTrackerUI(accId, appType);
+                    }
+                });
+            }
+        }
+
+        window.resetAccountDays = function(accId, appType) {
+            showCustomConfirm('Reset Account', 'Do you want to reset this account points and days to 0?', (confirmed) => {
+                if (confirmed) {
+                    editingStates[accId] = false;
+                    daysCache[accId] = 0;
+                    localStorage.setItem(accId + '_earned_points', 0);
+                    daysRef.child(accId).set(0);
+                    refreshSingleTrackerUI(accId, appType);
+                }
+            });
+        }
+
+        function updatePoppoAccountsModalList() {
+            const container = document.getElementById('accounts-list-container');
+            if (!container) return;
+
+            let allAccounts = [];
+            devicesData.forEach(dev => {
+                dev.poppo.forEach(p => {
+                    allAccounts.push({ name: p.name, devName: dev.name, color: dev.color, ...getAccountStats(p.id, 'poppo') });
+                });
+                dev.desdes.forEach(t => {
+                    allAccounts.push({ name: t.name, devName: dev.name, color: dev.color, ...getAccountStats(t.id, 'desdes') });
+                });
+                dev.tello.forEach(t => {
+                    allAccounts.push({ name: t.name, devName: dev.name, color: dev.color, ...getAccountStats(t.id, 'tello') });
+                });
+                dev.kaya.forEach(k => {
+                    allAccounts.push({ name: k.name, devName: dev.name, color: dev.color, ...getAccountStats(k.id, 'kaya') });
+                });
+                dev.yago.forEach(y => {
+                    allAccounts.push({ name: y.name, devName: dev.name, color: dev.color, ...getAccountStats(y.id, 'yago') });
+                });
+            });
+
+            let filtered = allAccounts.filter(acc => {
+                if (currentFilter === 'all') return true;
+                return acc.appType === currentFilter;
+            });
+
+            filtered.sort((a, b) => a.remainingDays - b.remainingDays);
+
+            let html = '';
+            filtered.forEach(acc => {
+                const isUrgent = acc.remainingDays <= 10;
+                const ruleConfig = appRules[acc.appType];
+                
+                html += '<div class="account-item-card border ' + (isUrgent ? 'border-emerald-500/80 shadow-lg shadow-emerald-500/10' : 'border-slate-700/50') + ' rounded-2xl p-3 flex items-center justify-between gap-3">' +
+                    '<div class="flex items-center gap-3 min-w-0">' +
+                        '<div class="w-10 h-10 rounded-xl bg-gradient-to-br ' + acc.color + ' flex items-center justify-center text-white flex-shrink-0 shadow">' +
+                            '<i class="fa-solid fa-video text-xs"></i>' +
+                        '</div>' +
+                        '<div class="min-w-0">' +
+                            '<div class="flex items-center gap-1.5">' +
+                                '<h4 class="text-xs font-bold text-slate-100 truncate">' + acc.name + '</h4>' +
+                                '<span class="text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase ' + ruleConfig.badgeColor + '">' + acc.appType + '</span>' +
+                            '</div>' +
+                            '<p class="text-[10px] text-slate-400 mt-0.5">Device: <span class="text-slate-300 font-semibold">' + acc.devName + '</span> | Days Done: <span class="text-amber-400 font-bold">' + acc.daysWorked + 'd</span></p>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="text-right flex-shrink-0">' +
+                        '<div class="' + (isUrgent ? 'text-emerald-400 font-extrabold text-xs urgent-pulse bg-emerald-500/10 px-2.5 py-1 rounded-xl border border-emerald-500/40' : 'text-amber-400 font-bold text-xs') + '">' +
+                            acc.remainingDays + ' DAYS LEFT!' +
+                        '</div>' +
+                        '<span class="text-[9px] text-slate-400 block mt-1">' + acc.earnedFormatted + ' / ' + acc.targetFormatted + ' pts</span>' +
+                    '</div>' +
+                '</div>';
+            });
+
+            if (filtered.length === 0) {
+                html = '<p class="text-center text-xs text-slate-500 py-6">No accounts found for this filter.</p>';
+            }
+
+            container.innerHTML = html;
+        }
+
+        function toEthiopianDate(date) {
+            const days = ["እሁድ", "ሰኞ", "ማክሰኞ", "ረቡዕ", "ሐሙስ", "አርብ", "ቅዳሜ"];
+            const ethMonths = ["መስከረም", "ጥቅምት", "ህዳር", "ታህሳስ", "ጥር", "የካቲት", "መጋቢት", "ሚያዚያ", "ግንቦት", "ሰኔ", "ሀምሌ", "ነሐሴ", "ጳጉሜ"];
+            const dayName = days[date.getDay()];
+            const year = date.getFullYear();
+            let ethYear = year - 8;
+            let newYearDay = ((ethYear + 1) % 4 === 0) ? 12 : 11;
+            let ethMonth, ethDay;
+            const gDayCount = Math.floor((date - new Date(year, 0, 1)) / (1000 * 60 * 60 * 24)) + 1;
+            const ethNewYearGCount = Math.floor((new Date(year, 8, newYearDay) - new Date(year, 0, 1)) / (1000 * 60 * 60 * 24)) + 1;
+            if (gDayCount >= ethNewYearGCount) {
+                ethYear = year - 7;
+                let diff = gDayCount - ethNewYearGCount;
+                ethMonth = Math.floor(diff / 30);
+                ethDay = (diff % 30) + 1;
+            } else {
+                let prevNewYearDay = (ethYear % 4 === 0) ? 12 : 11;
+                let prevNewYear = new Date(year - 1, 8, prevNewYearDay);
+                let diff = Math.floor((date - prevNewYear) / (1000 * 60 * 60 * 24));
+                ethMonth = Math.floor(diff / 30);
+                ethDay = (diff % 30) + 1;
+            }
+            return dayName + "፣ " + ethMonths[ethMonth] + " " + ethDay + "፣ " + ethYear + " ዓ.ም.";
+        }
+
+        function updateClockAndCountdown() {
+            const now = new Date();
+            const dateElem = document.getElementById('ethiopian-date-display');
+            if (dateElem) {
+                dateElem.innerHTML = '<i class="fa-regular fa-calendar-days mr-1"></i>' + toEthiopianDate(now);
+            }
+            let targetTime = new Date();
+            targetTime.setHours(19, 0, 0, 0);
+            if (now >= targetTime) {
+                targetTime.setDate(targetTime.getDate() + 1);
+            }
+            let diff = targetTime - now;
+            let hours = Math.floor(diff / (1000 * 60 * 60));
+            let minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+            let seconds = Math.floor((diff % (1000 * 60)) / 1000);
+            const timerElem = document.getElementById('countdown-timer');
+            if (timerElem) {
+                timerElem.innerText = hours.toString().padStart(2, '0') + ":" + minutes.toString().padStart(2, '0') + ":" + seconds.toString().padStart(2, '0');
+            }
+            const currentHours = now.getHours();
+            const currentMinutes = now.getMinutes();
+            const currentSeconds = now.getSeconds();
+            const todayStr = now.toDateString();
+            const lastReset = localStorage.getItem('lastAutoResetDate');
+            if (currentHours === 19 && currentMinutes === 0 && currentSeconds === 0 && lastReset !== todayStr) {
+                autoResetTasks();
+                localStorage.setItem('lastAutoResetDate', todayStr);
+            }
+        }
+
+        function autoResetTasks() {
+            const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+            let updates = {};
+            checkboxes.forEach(cb => {
+                cb.checked = false;
+                cb.disabled = false;
+                localStorage.removeItem(cb.id);
+                updates[cb.id] = false;
+            });
+            tasksRef.update(updates);
+            updateProgressLocal();
+        }
+
+        function playVictorySound() {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const notes = [261.63, 329.63, 392.00, 523.25];
+                notes.forEach((freq, index) => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.frequency.value = freq;
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start(ctx.currentTime + index * 0.12);
+                    osc.stop(ctx.currentTime + index * 0.12 + 0.2);
+                });
+            } catch(e) {}
+        }
+
+        function getAppNameFromId(id) {
+            if (id.indexOf('_master') !== -1) return 'Poppo Full Task';
+            if (id.indexOf('_live') !== -1) return 'Poppo Live';
+            if (id.indexOf('_party') !== -1) return 'Poppo Party';
+            if (id.indexOf('tello') !== -1) return 'tello live';
+            if (id.indexOf('desdes') !== -1) return 'desdes live';
+            if (id.indexOf('kaya') !== -1) return 'Kaya';
+            if (id.indexOf('yago') !== -1) return 'Yago';
+            return 'This task';
+        }
+
+        function countDeviceTasks(dev) {
+            let count = 0;
+            dev.poppo.forEach(p => { count += 2; });
+            count += dev.desdes.length;
+            count += dev.tello.length;
+            count += dev.kaya.length;
+            count += dev.yago.length;
+            return count;
+        }
+
+        function getDeviceProgress(devId) {
+            const dev = devicesData.find(d => d.id === devId);
+            if (!dev) return { total: 0, done: 0 };
+            let total = 0, done = 0;
+            dev.poppo.forEach(p => {
+                total += 2;
+                const liveEl = document.getElementById(p.id + '_live');
+                const partyEl = document.getElementById(p.id + '_party');
+                if ((liveEl && liveEl.checked) || localStorage.getItem(p.id + '_live') === 'true') done++;
+                if ((partyEl && partyEl.checked) || localStorage.getItem(p.id + '_party') === 'true') done++;
+            });
+            dev.desdes.forEach(t => {
+                total++;
+                const el = document.getElementById(t.id);
+                if ((el && el.checked) || localStorage.getItem(t.id) === 'true') done++;
+            });
+            dev.tello.forEach(t => {
+                total++;
+                const el = document.getElementById(t.id);
+                if ((el && el.checked) || localStorage.getItem(t.id) === 'true') done++;
+            });
+            dev.kaya.forEach(k => {
+                total++;
+                const el = document.getElementById(k.id);
+                if ((el && el.checked) || localStorage.getItem(k.id) === 'true') done++;
+            });
+            dev.yago.forEach(y => {
+                total++;
+                const el = document.getElementById(y.id);
+                if ((el && el.checked) || localStorage.getItem(y.id) === 'true') done++;
+            });
+            return { total, done };
+        }
+
+        function updateAccountPointsIncrement(accId, appType, isChecked) {
+            let earnedPoints = daysCache[accId] !== undefined ? parseFloat(daysCache[accId]) : parseFloat(localStorage.getItem(accId + '_earned_points') || '0');
+            if (isNaN(earnedPoints)) earnedPoints = 0;
+
+            const rule = appRules[appType];
+            const dailyPoints = rule.daily; 
+            
+            if (isChecked) {
+                earnedPoints += dailyPoints;
+            } else {
+                earnedPoints = Math.max(0, earnedPoints - dailyPoints);
+            }
+            
+            daysCache[accId] = earnedPoints;
+            localStorage.setItem(accId + '_earned_points', earnedPoints);
+            daysRef.child(accId).set(earnedPoints);
+            refreshSingleTrackerUI(accId, appType);
+        }
+
+        function createTrackerBadgeHtml(accId, appType) {
+            const stats = getAccountStats(accId, appType);
+            return '<div id="' + accId + '_stats" class="hidden my-2 p-2.5 bg-slate-900/95 rounded-xl border border-slate-700 text-[10px] space-y-1.5 shadow-inner">' +
+                '<div class="flex justify-between items-center text-slate-200 font-medium">' +
+                    '<span><i class="fa-regular fa-calendar-check text-amber-400 mr-1"></i>Days: <strong class="text-amber-400 font-bold">' + stats.daysWorked + ' d</strong></span>' +
+                    '<span><i class="fa-solid fa-coins text-yellow-400 blink-icon mr-1"></i>Points: <strong class="text-amber-400 font-extrabold">' + stats.earnedFormatted + '</strong> / <span class="text-slate-300 font-bold">' + stats.targetFormatted + '</span></span>' +
+                '</div>' +
+                '<div class="flex justify-between items-center text-slate-300 mt-1 flex-wrap gap-1">' +
+                    '<span class="text-emerald-400 font-bold"><i class="fa-solid fa-hourglass-start mr-1"></i>Days Left: ' + stats.remainingDays + '</span>' +
+                    '<div class="flex items-center gap-1 ml-auto">' +
+                        '<button onclick="toggleEditPoints(\'' + accId + '\', \'' + appType + '\')" class="btn-day-adjust btn-day-edit" title="Edit Points"><i class="fa-solid fa-pen-to-square text-[10px]"></i> Edit</button>' +
+                        '<button onclick="resetAccountDays(\'' + accId + '\', \'' + appType + '\')" class="btn-day-adjust btn-day-reset" title="Reset Account"><i class="fa-solid fa-rotate-left text-[9px]"></i> Reset</button>' +
+                    '</div>' +
+                '</div>' +
+            '</div>';
+        }
+
+        function renderDashboard() {
+            const container = document.getElementById('devices-container');
+            if (!container) return;
+
+            const savedStates = {};
+            document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+                savedStates[cb.id] = cb.checked;
+            });
+
+            let fullHtml = '';
+            let filteredDevices = devicesData.filter(dev => {
+                if (currentPhoneFilter === 'all') return true;
+                return dev.id === currentPhoneFilter;
+            });
+
+            filteredDevices.forEach((dev, idx) => {
+                const origIndex = devicesData.findIndex(d => d.id === dev.id);
+                const totalTasks = countDeviceTasks(dev);
+                
+                fullHtml += '<div class="device-card rounded-2xl p-4 shadow-lg hover:shadow-xl transition-all duration-300">' +
+                    '<div class="flex items-center justify-between mb-3">' +
+                        '<div class="flex items-center gap-3 min-w-0 pr-2">' +
+                            '<div class="w-9 h-9 rounded-xl bg-gradient-to-br ' + dev.color + ' flex items-center justify-center shadow-lg flex-shrink-0">' +
+                                '<i class="fa-solid fa-mobile-button text-white text-sm"></i>' +
+                            '</div>' +
+                            '<div class="min-w-0">' +
+                                '<h3 class="phone-title text-slate-100 truncate">' + (origIndex + 1) + '. ' + dev.name + '</h3>' +
+                                '<p class="text-[10px] text-slate-400">' + totalTasks + ' tasks</p>' +
+                            '</div>' +
+                        '</div>' +
+                        '<div class="flex items-center gap-1.5 flex-shrink-0">' +
+                            '<span id="badge-' + dev.id + '" class="text-[10px] font-bold px-2 py-1 rounded-full bg-slate-700 text-slate-300 transition-all whitespace-nowrap">Pending</span>' +
+                            '<span id="pct-' + dev.id + '" class="text-base font-extrabold text-amber-400 whitespace-nowrap">0%</span>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="w-full device-progress-bg h-2 rounded-full overflow-hidden mb-4">' +
+                        '<div id="bar-' + dev.id + '" class="device-progress-fill h-full rounded-full" style="width: 0%"></div>' +
+                    '</div>' +
+                    '<div class="space-y-3">';
+
+                if (dev.poppo.length > 0) {
+                    fullHtml += '<div class="flex items-center gap-2 mb-1">' +
+                        '<i class="fa-solid fa-video text-rose-400 text-[10px]"></i>' +
+                        '<p class="app-header text-rose-400">Poppo Live <span class="text-slate-500">(' + dev.poppo.length + ')</span></p>' +
+                    '</div>';
+                    dev.poppo.forEach(p => {
+                        fullHtml += '<div class="account-item-card rounded-xl overflow-hidden mb-2 p-1">' +
+                            '<div class="task-row flex items-center justify-between p-2.5 rounded-lg">' +
+                                '<div class="flex items-center gap-2.5 min-w-0">' +
+                                    '<input type="checkbox" id="' + p.id + '_master" data-type="master" data-prefix="' + p.id + '" data-app="poppo" class="checkbox-custom w-5 h-5 accent-emerald-500 rounded cursor-pointer flex-shrink-0">' +
+                                    '<label for="' + p.id + '_master" class="task-label text-amber-300 cursor-pointer select-none truncate">' + p.name + '</label>' +
+                                '</div>' +
+                                '<div class="flex items-center gap-1.5 flex-shrink-0 ml-2">' +
+                                    '<button class="toggle-btn btn-view-tracker" data-target="' + p.id + '_stats" title="Toggle Tracker Panel">' +
+                                        '<i class="fa-solid fa-chart-line"></i>' +
+                                    '</button>' +
+                                    '<button class="toggle-btn text-slate-400 hover:text-white p-1 transition" data-target="' + p.id + '_details">' +
+                                        '<i class="fa-solid fa-chevron-down text-xs"></i>' +
+                                    '</button>' +
+                                '</div>' +
+                            '</div>' +
+                            '<div class="px-2.5">' + createTrackerBadgeHtml(p.id, 'poppo') + '</div>' +
+                            '<div id="' + p.id + '_details" class="hidden p-2.5 border-t border-slate-700/30 space-y-2 bg-slate-900/30 rounded-b-xl">' +
+                                '<div class="flex items-center gap-2.5 pl-1">' +
+                                    '<input type="checkbox" id="' + p.id + '_live" data-type="sub" data-prefix="' + p.id + '" class="checkbox-custom sub accent-emerald-500 rounded cursor-pointer flex-shrink-0">' +
+                                    '<label for="' + p.id + '_live" class="sub-task-label text-slate-300 cursor-pointer select-none">Live (1 hr)</label>' +
+                                '</div>' +
+                                '<div class="flex items-center gap-2.5 pl-1">' +
+                                    '<input type="checkbox" id="' + p.id + '_party" data-type="sub" data-prefix="' + p.id + '" class="checkbox-custom sub accent-emerald-500 rounded cursor-pointer flex-shrink-0">' +
+                                    '<label for="' + p.id + '_party" class="sub-task-label text-slate-300 cursor-pointer select-none">Party (1 hr)</label>' +
+                                '</div>' +
+                            '</div>' +
+                        '</div>';
+                    });
+                }
+
+                if (dev.desdes.length > 0) {
+                    fullHtml += '<div class="flex items-center gap-2 mt-2 mb-1">' +
+                        '<i class="fa-solid fa-tower-broadcast text-blue-400 text-[10px]"></i>' +
+                        '<p class="app-header text-blue-400">desdes live <span class="text-slate-500">(' + dev.desdes.length + ')</span></p>' +
+                    '</div>';
+                    dev.desdes.forEach(t => {
+                        fullHtml += '<div class="account-item-card rounded-xl p-2.5 mb-2">' +
+                            '<div class="task-row flex items-center justify-between">' +
+                                '<div class="flex items-center gap-2.5 min-w-0">' +
+                                    '<input type="checkbox" id="' + t.id + '" data-type="standalone" data-acc="' + t.id + '" data-app="desdes" class="checkbox-custom w-5 h-5 accent-emerald-500 rounded cursor-pointer flex-shrink-0">' +
+                                    '<label for="' + t.id + '" class="task-label text-slate-200 cursor-pointer select-none truncate">' + t.name + '</label>' +
+                                '</div>' +
+                                '<button class="toggle-btn btn-view-tracker flex-shrink-0 ml-2" data-target="' + t.id + '_stats" title="Toggle Tracker Panel">' +
+                                    '<i class="fa-solid fa-chart-line"></i>' +
+                                '</button>' +
+                            '</div>' +
+                            createTrackerBadgeHtml(t.id, 'desdes') +
+                        '</div>';
+                    });
+                }
+
+                if (dev.tello.length > 0) {
+                    fullHtml += '<div class="flex items-center gap-2 mt-2 mb-1">' +
+                        '<i class="fa-solid fa-tower-broadcast text-teal-400 text-[10px]"></i>' +
+                        '<p class="app-header text-teal-400">tello live <span class="text-slate-500">(' + dev.tello.length + ')</span></p>' +
+                    '</div>';
+                    dev.tello.forEach(t => {
+                        fullHtml += '<div class="account-item-card rounded-xl p-2.5 mb-2">' +
+                            '<div class="task-row flex items-center justify-between">' +
+                                '<div class="flex items-center gap-2.5 min-w-0">' +
+                                    '<input type="checkbox" id="' + t.id + '" data-type="standalone" data-acc="' + t.id + '" data-app="tello" class="checkbox-custom w-5 h-5 accent-emerald-500 rounded cursor-pointer flex-shrink-0">' +
+                                    '<label for="' + t.id + '" class="task-label text-slate-200 cursor-pointer select-none truncate">' + t.name + '</label>' +
+                                '</div>' +
+                                '<button class="toggle-btn btn-view-tracker flex-shrink-0 ml-2" data-target="' + t.id + '_stats" title="Toggle Tracker Panel">' +
+                                    '<i class="fa-solid fa-chart-line"></i>' +
+                                '</button>' +
+                            '</div>' +
+                            createTrackerBadgeHtml(t.id, 'tello') +
+                        '</div>';
+                    });
+                }
+
+                if (dev.kaya.length > 0) {
+                    fullHtml += '<div class="flex items-center gap-2 mt-2 mb-1">' +
+                        '<i class="fa-solid fa-star text-purple-400 text-[10px]"></i>' +
+                        '<p class="app-header text-purple-400">Kaya Live <span class="text-slate-500">(' + dev.kaya.length + ')</span></p>' +
+                    '</div>';
+                    dev.kaya.forEach(k => {
+                        fullHtml += '<div class="account-item-card rounded-xl p-2.5 mb-2">' +
+                            '<div class="task-row flex items-center justify-between">' +
+                                '<div class="flex items-center gap-2.5 min-w-0">' +
+                                    '<input type="checkbox" id="' + k.id + '" data-type="standalone" data-acc="' + k.id + '" data-app="kaya" class="checkbox-custom w-5 h-5 accent-emerald-500 rounded cursor-pointer flex-shrink-0">' +
+                                    '<label for="' + k.id + '" class="task-label text-slate-200 cursor-pointer select-none truncate">' + k.name + '</label>' +
+                                '</div>' +
+                                '<button class="toggle-btn btn-view-tracker flex-shrink-0 ml-2" data-target="' + k.id + '_stats" title="Toggle Tracker Panel">' +
+                                    '<i class="fa-solid fa-chart-line"></i>' +
+                                '</button>' +
+                            '</div>' +
+                            createTrackerBadgeHtml(k.id, 'kaya') +
+                        '</div>';
+                    });
+                }
+
+                if (dev.yago.length > 0) {
+                    fullHtml += '<div class="flex items-center gap-2 mt-2 mb-1">' +
+                        '<i class="fa-solid fa-fire text-orange-400 text-[10px]"></i>' +
+                        '<p class="app-header text-orange-400">Yago Live <span class="text-slate-500">(' + dev.yago.length + ')</span></p>' +
+                    '</div>';
+                    dev.yago.forEach(y => {
+                        fullHtml += '<div class="account-item-card rounded-xl p-2.5 mb-2">' +
+                            '<div class="task-row flex items-center justify-between">' +
+                                '<div class="flex items-center gap-2.5 min-w-0">' +
+                                    '<input type="checkbox" id="' + y.id + '" data-type="standalone" data-acc="' + y.id + '" data-app="yago" class="checkbox-custom w-5 h-5 accent-emerald-500 rounded cursor-pointer flex-shrink-0">' +
+                                    '<label for="' + y.id + '" class="task-label text-slate-200 cursor-pointer select-none truncate">' + y.name + '</label>' +
+                                '</div>' +
+                                '<button class="toggle-btn btn-view-tracker flex-shrink-0 ml-2" data-target="' + y.id + '_stats" title="Toggle Tracker Panel">' +
+                                    '<i class="fa-solid fa-chart-line"></i>' +
+                                '</button>' +
+                            '</div>' +
+                            createTrackerBadgeHtml(y.id, 'yago') +
+                        '</div>';
+                    });
+                }
+
+                fullHtml += '</div></div>';
+            });
+            container.innerHTML = fullHtml;
+            
+            document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+                if (savedStates[cb.id] !== undefined) {
+                    cb.checked = savedStates[cb.id];
+                } else {
+                    const storedVal = localStorage.getItem(cb.id);
+                    if (storedVal === 'true') {
+                        cb.checked = true;
+                    }
+                }
+            });
+
+            rebindDynamicElements();
+        }
+
+        function rebindDynamicElements() {
+            document.querySelectorAll('.toggle-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const targetId = this.getAttribute('data-target');
+                    const el = document.getElementById(targetId);
+                    if (el) {
+                        if (el.classList.contains('hidden')) {
+                            el.classList.remove('hidden');
+                            this.classList.add('open');
+                        } else {
+                            el.classList.add('hidden');
+                            this.classList.remove('open');
+                        }
+                    }
+                });
+            });
+
+            document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+                cb.addEventListener('change', function() {
+                    const type = this.getAttribute('data-type');
+                    const prefix = this.getAttribute('data-prefix');
+                    const checkboxElem = this;
+
+                    if (!checkboxElem.checked) {
+                        const appName = getAppNameFromId(checkboxElem.id);
+                        showCustomConfirm('Confirmation', 'Do you want to uncheck "' + appName + '"?', (confirmed) => {
+                            if (!confirmed) {
+                                checkboxElem.checked = true;
+                                return;
+                            } else {
+                                processCheckboxChange(checkboxElem, type, prefix);
+                            }
+                        });
+                    } else {
+                        processCheckboxChange(checkboxElem, type, prefix);
+                    }
+                });
+            });
+            updateProgressLocal();
+        }
+
+        function setupEventListeners() {
+            const menuToggle = document.getElementById('menu-toggle-btn');
+            const dropdownMenu = document.getElementById('dropdown-menu');
+
+            menuToggle.addEventListener('click', (e) => {
+                e.stopPropagation();
+                dropdownMenu.classList.toggle('hidden');
+            });
+
+            document.addEventListener('click', () => {
+                dropdownMenu.classList.add('hidden');
+            });
+
+            dropdownMenu.addEventListener('click', (e) => {
+                e.stopPropagation();
+            });
+
+            document.querySelectorAll('.filter-tab').forEach(tab => {
+                tab.addEventListener('click', function() {
+                    document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+                    this.classList.add('active');
+                    currentFilter = this.getAttribute('data-filter');
+                    updatePoppoAccountsModalList();
+                });
+            });
+
+            document.querySelectorAll('.phone-filter-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    document.querySelectorAll('.phone-filter-btn').forEach(b => b.classList.remove('active'));
+                    this.classList.add('active');
+                    currentPhoneFilter = this.getAttribute('data-phone');
+                    renderDashboard();
+                });
+            });
+
+            document.getElementById('notify-btn').addEventListener('click', function() {
+                if(window.requestNotificationPermission) {
+                    window.requestNotificationPermission();
+                }
+            });
+            
+            document.getElementById('reset-btn').addEventListener('click', function() {
+                showCustomConfirm('Confirmation', 'Do you want to reset today ticks only?', (confirmed) => {
+                    if (confirmed) {
+                        autoResetTasks();
+                    }
+                });
+            });
+        }
+
+        function processCheckboxChange(checkboxElem, type, prefix) {
+            if (type === 'master') {
+                const live = document.getElementById(prefix + '_live');
+                const party = document.getElementById(prefix + '_party');
+                if (live && party) {
+                    live.checked = checkboxElem.checked;
+                    party.checked = checkboxElem.checked;
+                }
+                updateAccountPointsIncrement(prefix, 'poppo', checkboxElem.checked);
+            } else if (type === 'sub') {
+                const master = document.getElementById(prefix + '_master');
+                const live = document.getElementById(prefix + '_live');
+                const party = document.getElementById(prefix + '_party');
+                if (master && live && party) {
+                    const bothChecked = (live.checked && party.checked);
+                    if (master.checked !== bothChecked) {
+                        master.checked = bothChecked;
+                        updateAccountPointsIncrement(prefix, 'poppo', bothChecked);
+                    }
+                }
+            } else if (type === 'standalone') {
+                const accId = checkboxElem.getAttribute('data-acc');
+                const appType = checkboxElem.getAttribute('data-app');
+                if (accId && appType) {
+                    updateAccountPointsIncrement(accId, appType, checkboxElem.checked);
+                }
+            }
+            syncProgressToFirebase();
+        }
+
+        function syncProgressToFirebase() {
+            const allCheckboxes = document.querySelectorAll('input[type="checkbox"]');
+            let updates = {};
+            allCheckboxes.forEach(cb => {
+                updates[cb.id] = cb.checked;
+                localStorage.setItem(cb.id, cb.checked);
+            });
+            tasksRef.update(updates);
+            updateProgressLocal();
+        }
+
+        function updateProgressLocal() {
+            devicesData.forEach(dev => {
+                const prog = getDeviceProgress(dev.id);
+                const devPct = prog.total > 0 ? Math.round((prog.done / prog.total) * 100) : 0;
+                const bar = document.getElementById('bar-' + dev.id);
+                const pct = document.getElementById('pct-' + dev.id);
+                const badge = document.getElementById('badge-' + dev.id);
+                if (bar) bar.style.width = devPct + '%';
+                if (pct) pct.innerText = devPct + '%';
+                if (badge) {
+                    if (devPct === 100) {
+                        badge.innerText = '✓ Completed';
+                        badge.className = 'completed-badge text-[10px] font-bold px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition-all whitespace-nowrap';
+                    } else if (devPct > 0) {
+                        badge.innerText = 'In Progress';
+                        badge.className = 'text-[10px] font-bold px-2 py-1 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 transition-all whitespace-nowrap';
+                    } else {
+                        badge.innerText = 'Pending';
+                        badge.className = 'text-[10px] font-bold px-2 py-1 rounded-full bg-slate-700 text-slate-400 border border-slate-600 transition-all whitespace-nowrap';
+                    }
+                }
+            });
+
+            let phonesDoneCount = 0;
+            devicesData.forEach(dev => {
+                const prog = getDeviceProgress(dev.id);
+                if (prog.total > 0 && prog.done === prog.total) phonesDoneCount++;
+            });
+
+            let totalCheckedAll = 0;
+            const allPossibleIds = [];
+            devicesData.forEach(d => {
+                d.poppo.forEach(p => { allPossibleIds.push(p.id + '_live'); allPossibleIds.push(p.id + '_party'); });
+                d.desdes.forEach(t => { allPossibleIds.push(t.id); });
+                d.tello.forEach(t => { allPossibleIds.push(t.id); });
+                d.kaya.forEach(k => { allPossibleIds.push(k.id); });
+                d.yago.forEach(y => { allPossibleIds.push(y.id); });
+            });
+            
+            let totalPossibleTasksCount = allPossibleIds.length;
+            allPossibleIds.forEach(id => {
+                const el = document.getElementById(id);
+                if ((el && el.checked) || localStorage.getItem(id) === 'true') {
+                    totalCheckedAll++;
+                }
+            });
+
+            const overallPercentage = totalPossibleTasksCount > 0 ? Math.round((totalCheckedAll / totalPossibleTasksCount) * 100) : 0;
+
+            const pBar = document.getElementById('progress-bar');
+            const pText = document.getElementById('progress-text');
+            if (pBar) pBar.style.width = overallPercentage + '%';
+            if (pText) pText.innerText = overallPercentage + '%';
+
+            document.getElementById('stat-total').innerText = totalPossibleTasksCount;
+            document.getElementById('stat-done').innerText = totalCheckedAll;
+            document.getElementById('stat-remaining').innerText = Math.max(0, totalPossibleTasksCount - totalCheckedAll);
+            document.getElementById('stat-phones-done').innerText = phonesDoneCount + '/6';
+
+            const congratsBanner = document.getElementById('congrats-banner');
+            if (overallPercentage === 100) {
+                if (congratsBanner) congratsBanner.classList.remove('hidden');
+                if (!celebrated) {
+                    celebrated = true;
+                    playVictorySound();
+                    if (typeof confetti === 'function') {
+                        confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 } });
+                        setTimeout(() => confetti({ particleCount: 100, spread: 100, origin: { y: 0.7 }, colors: ['#f59e0b', '#10b981', '#3b82f6'] }), 300);
+                    }
+                }
+            } else {
+                if (congratsBanner) congratsBanner.classList.add('hidden');
+                celebrated = false;
+            }
+        }
+
+        function initFirebaseListeners() {
+            tasksRef.on('value', (snapshot) => {
+                const data = snapshot.val();
+                if (data) {
+                    Object.keys(data).forEach(id => {
+                        localStorage.setItem(id, data[id]);
+                        const cb = document.getElementById(id);
+                        if (cb) {
+                            cb.checked = data[id];
+                        }
+                    });
+                    updateProgressLocal();
+                }
+            });
+
+            daysRef.on('value', (snapshot) => {
+                const data = snapshot.val();
+                if (data) {
+                    daysCache = data;
+                    Object.keys(data).forEach(accId => {
+                        localStorage.setItem(accId + '_earned_points', data[accId]);
+                        let appType = 'poppo';
+                        if (accId.includes('tello')) appType = 'tello';
+                        else if (accId.includes('desdes')) appType = 'desdes';
+                        else if (accId.includes('kaya')) appType = 'kaya';
+                        else if (accId.includes('yago')) appType = 'yago';
+                        refreshSingleTrackerUI(accId, appType);
+                    });
+                }
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            renderDashboard();
+            setupEventListeners();
+            initFirebaseListeners();
+            setInterval(updateClockAndCountdown, 1000);
+            updateClockAndCountdown();
+        });
+    </script>
+</body>
+</html>
